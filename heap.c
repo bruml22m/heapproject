@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "util.h"
 
+
 // This next bunch of stuff makes it so that by default, the functions are
 // compiled with their normal names, like "malloc"... *but*, they can
 // be given alternate names (e.g., "my_malloc").  If you want to actually
@@ -43,11 +44,40 @@ typedef struct {
 
 // We'll set this to point to the start of the first BlockHeader.
 BlockHeader * first_block = NULL;
+static int verbose = 1;
+static int relative_addrs = 0;
 
 
 // ---------------------------------------------------------------------------
 //  Helpers
 // ---------------------------------------------------------------------------
+
+// just testing
+
+// static void dumpaddr (void * a)
+// {
+//   intptr_t aa = (intptr_t)a;
+//   if (relative_addrs) aa -= (intptr_t)first_block;
+//   printhex32(aa);
+// }
+
+// static void do_showheap (char ** args)
+// {
+//   BlockHeader * b = (BlockHeader *)first_block;
+//   if (verbose) print("-- heap --\n");
+//   while (true)
+//   {
+//     dumpaddr(b);sp();printhex32(b->size);sp();
+//     if (b->is_used && !b->size) print("XXXX");
+//     else if (b->is_used && b->size) print("USED");
+//     else if (!b->is_used && b->size) print("FREE");
+//     else print("????");
+//     nl();
+//     if (b->size == 0) break;
+//     b = (BlockHeader *)(((char *)b)+b->size);
+//   }
+// }
+
 
 // Given a pointer, return a pointer to the byte offset bytes after it
 // (or before it, if offset is negative).
@@ -74,12 +104,12 @@ static void try_merge (BlockHeader * b)
   {
     // Get a pointer to the next block after b.
     BlockHeader * nb = (BlockHeader *)offset_ptr(b, b->size); // Next block
-
+  
 	// If the next block is used or we reached the sentinel, we're done.
-    if (nb->size == 0 || nb->is_used == BLOCK_USED) break;
+    if (nb->size == 0 || nb->is_used == BLOCK_USED) return;
 
-    // Update b's size since it merged with nb, including the size of nb's header.
-    b->size += nb->size + sizeof(BlockHeader);
+    // Update b's size since it merged with nb
+	b->size += nb->size;
 
   }
 }
@@ -109,8 +139,7 @@ static void try_merge_all() {
 // sz should be an even multiple of ALIGN_BYTES.
 static void try_split(BlockHeader *b, size_t sz) {
 
-  // adjust sz to be aligned if not already, including header and ensuring alignment
-  sz = (sz + sizeof(BlockHeader) + ALIGN_BYTES - 1) & ~(ALIGN_BYTES - 1);
+  if (sz < sizeof(BlockHeader) || (sz % ALIGN_BYTES != 0)) return; // sanity check
 
   // if the desired size is greater/equal to the existing block size, we
   // should not split the block! Handle this case.
@@ -126,11 +155,12 @@ static void try_split(BlockHeader *b, size_t sz) {
   BlockHeader *nb = (BlockHeader *)offset_ptr(b, sz);
   
   // Set up the new header
-  nb->size = leftover - sizeof(BlockHeader);
+  nb->size = leftover;
   nb->is_used = BLOCK_FREE;
 
   // Adjust the size of b
   b->size = sz;
+
 }
 
 
@@ -149,7 +179,8 @@ static void add_sentinel ()
   // Now b is pointing at valid memory to be used by the sentinel.  Set up
   // b properly!
   b->size = 0; // sentinel's size is 0 to indicate the end of blocks
-  b->is_used = BLOCK_USED; // m the sentinel as used to prevent its allocation
+  b->is_used = BLOCK_USED; // setting the sentinel as used to prevent its allocation
+
 }
 
 // Find the last block before the sentinel.  If it's unused, shrink the heap
@@ -271,6 +302,9 @@ void * MALLOC (size_t sz)
 
 void FREE (void * ptr)
 {
+
+ 
+
   // Special case -- free(NULL) is legal and does nothing.
   if (!ptr) return;
 
@@ -279,17 +313,23 @@ void FREE (void * ptr)
   // by just offsetting the pointer.
   BlockHeader *b = (BlockHeader *)((char *)ptr - sizeof(BlockHeader));
 
+
   // Double check that the block is marked as used!
   ASSERT(b->is_used == BLOCK_USED);
 
   // Mark the block as free
   b->is_used = BLOCK_FREE;
 
+//   do_showheap(0);
+
   // Try to merge blocks (you'll have to finish try_merge_all()!).
   try_merge_all();
 
   // Try to release memory back (you'll have to finish try_release_memory()!).
   try_release_memory();
+//   do_showheap(0);
+
+ 
 }
 
 
@@ -374,3 +414,4 @@ void * REALLOCARRAY (void * ptr, size_t nmemb, size_t size)
   // We actually are supposed to check for overflow, but don't.
   return REALLOC(ptr, nmemb * size);
 }
+
